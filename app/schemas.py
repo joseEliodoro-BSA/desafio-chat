@@ -6,7 +6,7 @@ class UserSchema(BaseModel):
     _id: str | None = None
     username: str
 
-class MessageGlobal(BaseModel):
+class Message(BaseModel):
     msg: str
     username: str
     _id: str | None = None
@@ -19,9 +19,3 @@ class MessageGlobal(BaseModel):
     #     if isinstance(value, str):
     #         return datetime.strptime(value, "%d/%m/%Y %H:%M:%S")
     #     return value
-
-class UserCollection(BaseModel):
-    messages: List[UserSchema]
-    
-class MessageCollection(BaseModel):
-    messages: List[MessageGlobal]

@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from app.db import user_collection, chats_collection
 from app.websocket_manager import websocket_manager
-from app.schemas import MessageGlobal
+from app.schemas import Message
 from app.routes import router
 
 from contextlib import asynccontextmanager
@@ -34,7 +34,7 @@ app.include_router(router)
 def now():
     return datetime.now().timestamp()
 
-async def save_message_geral(msgDto: MessageGlobal):
+async def save_message_geral(msgDto: Message):
 
     if not await user_collection.find_one({"username": msgDto.username}):
         raise HTTPException(404, "usuário não encontrado")
@@ -45,7 +45,7 @@ async def save_message_geral(msgDto: MessageGlobal):
     
     return new_msg
 
-async def save_message_private(msgDto: MessageGlobal):
+async def save_message_private(msgDto: Message):
 
     if not await user_collection.find_one({"username": msgDto.username}):
         raise HTTPException(404, "usuário não encontrado")
@@ -80,20 +80,20 @@ async def connect(websocket: WebSocket):
 
                 if(chat == "geral"):
                     try:
-                        message = await save_message_geral(MessageGlobal(username=username, msg=msg, chat=chat))
+                        message = await save_message_geral(Message(username=username, msg=msg, chat=chat))
                         await websocket_manager.pub_message(
                             channel="geral", 
                             socket_id=socket_id,
                             msg=message
                         )
                     except HTTPException as e:
-                        await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
-                        
+                        await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})                       
                 elif(chat == "private"):
                     if not data_json.get("username_receive"):
-                        await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"})
+                        await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"}) 
+                        continue
                     try:
-                        message = await save_message_private(MessageGlobal(
+                        message = await save_message_private(Message(
                             username=username, 
                             msg=msg, chat=chat, 
                             username_receive=data_json["username_receive"]
@@ -106,7 +106,11 @@ async def connect(websocket: WebSocket):
                     
                     except HTTPException as e:
                         await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
-
+            
+            elif data_json.get("command") == "test":
+                await websocket_manager.send(socket_id, {"code": 200, "detail": "hello word"})
+            else:
+                await websocket_manager.send(socket_id, {"code": 400, "error": "inválid command"})
     except WebSocketDisconnect:
         await websocket_manager.disconnect(socket_id)
     

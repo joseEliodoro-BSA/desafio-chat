@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from app.schemas import UserSchema, MessageCollection, UserCollection
+from app.schemas import UserSchema, Message
 from app.db import user_collection, chats_collection
-
+from typing import List
 router = APIRouter()
 
 @router.post("/create-user")
@@ -20,13 +20,18 @@ async def delete_all_message():
     await chats_collection.delete_many({})
     return True
 
-@router.get("/find-messages")
-async def list_message():
-    return MessageCollection(messages=await chats_collection.find().to_list(100))
+@router.delete("/delete-all-users")
+async def delete_all_users():
+    await user_collection.delete_many({})
+    return True
 
-@router.get("/find-users")
+@router.get("/find-messages", response_model= List[Message])
 async def list_message():
-    return UserCollection(messages=await user_collection.find().to_list(100))
+    return await chats_collection.find().to_list(100)
+
+@router.get("/find-users", response_model=List[UserSchema])
+async def list_message():
+    return await user_collection.find().to_list(100)
 
 
 
