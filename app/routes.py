@@ -84,7 +84,7 @@ async def connect(websocket: WebSocket):
     username = websocket.query_params.get('username')
     try:
         await websocket_manager.connect(websocket, socket_id, username)
-        await websocket_manager.send(socket_id, {"hello": "world"})
+        await websocket_manager.send(socket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
     
         while True:
             data: str = await websocket.receive_text()
@@ -99,11 +99,11 @@ async def connect(websocket: WebSocket):
             if(chat == "geral"):
                 try:
                     message = await send_message_chat_geral(MessageGlobal(username=username, msg=msg, chat=chat))
-                    await websocket_manager.send_message(
+                    await websocket_manager.pub_message(
                         channel="geral", 
                         socket_id=socket_id, 
                         msg=message
-                    )#{"code": 200, "details": "mensagem enviada com sucesso"})
+                    )
                 except HTTPException as e:
                     await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
                     
@@ -116,15 +116,13 @@ async def connect(websocket: WebSocket):
                         msg=msg, chat=chat, 
                         username_receive=data_json["username_receive"]
                     ))
-                    await websocket_manager.send_message(
+                    await websocket_manager.pub_message(
                         channel="private",
                         socket_id=socket_id, 
                         msg=message
-                    )#{"code": 200, "details": "mensagem enviada com sucesso"})
+                    )
                 except HTTPException as e:
                     await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
-
-            # await websocket_manager.send(socket_id, data_json)
 
     except WebSocketDisconnect:
         await websocket_manager.disconnect(socket_id)

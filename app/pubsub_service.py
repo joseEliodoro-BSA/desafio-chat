@@ -7,17 +7,17 @@ from threading import Thread
 
 class PubSub:
     def __init__(self):
-        self.r = Redis(host="localhost", port=6379, encoding="utf-8", decode_responses=True)
+        self.redis_client = Redis(host="localhost", port=6379, encoding="utf-8", decode_responses=True)
 
     def sub(self, room: str, fn: Callable):
-        pubsub = self.r.pubsub()
+        pubsub = self.redis_client.pubsub()
         pubsub.subscribe(room)
         for msg in pubsub.listen():
             if msg and msg["type"] == "message":
                 asyncio.run(fn(msg))
 
     def pub(self, room: str, msg: Dict):
-        self.r.publish(room, json.dumps(msg))
+        self.redis_client.publish(room, json.dumps(msg))
 
 async def main():
     pubsub = PubSub()

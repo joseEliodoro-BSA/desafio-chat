@@ -15,32 +15,32 @@ Connections = Dict[str, ConnectionData]
 
 class WebSocketManager:
     def __init__(self):
-        self.clients: Connections = {}
+        self.clients_connected: Connections = {}
         self.look = asyncio.Lock()
         self.pubsub = PubSub()
 
-    async def connect(self, websocket: WebSocket, client_id, username: str):
+    async def connect(self, websocket: WebSocket, socket_id, username: str):
         await websocket.accept()
         async with self.look:
-            self.clients[client_id] = ConnectionData(username, websocket)
+            self.clients_connected[socket_id] = ConnectionData(username, websocket)
 
     async def broadcast(self, message, exclude_socket_id: List[str] | None = None):
-        for socket_id, connection_data in self.clients.items():
+        for socket_id, connection_data in self.clients_connected.items():
             if not (socket_id in exclude_socket_id):
                 await connection_data.websocket.send_text(json.dumps(message))
 
     async def disconnect(self, socket_id: str):
-        if socket_id in self.clients:
+        if socket_id in self.clients_connected:
             async with self.look:
-                del self.clients[socket_id]
+                del self.clients_connected[socket_id]
 
     async def disconnect_all(self):
-        for socket_id in self.clients.keys():
+        for socket_id in self.clients_connected.keys():
             await self.disconnect(socket_id)
             
     async def send(self, socket_id, message: Dict):
-        if socket_id in self.clients:
-            await self.clients[socket_id].websocket.send_text(json.dumps(message, ensure_ascii=False))
+        if socket_id in self.clients_connected:
+            await self.clients_connected[socket_id].websocket.send_text(json.dumps(message, ensure_ascii=False))
 
     async def receive_geral(self, msg: Dict):
         if msg["channel"] == "geral":
@@ -50,7 +50,7 @@ class WebSocketManager:
             await self.broadcast(data, exclude_socket_id=[socket_id])
 
     def find_client_by_username(self, username):
-        for socket_id, connect in self.clients.items():
+        for socket_id, connect in self.clients_connected.items():
             if connect.username == username:
                 return socket_id
 
@@ -67,7 +67,7 @@ class WebSocketManager:
             else:
                 await self.send(send_socket_id, {"error": f"usuário {username_receive} não foi encontrado ou não conectado"})
 
-    async def send_message(self, channel: str, socket_id: str, msg: Dict):
+    async def pub_message(self, channel: str, socket_id: str, msg: Dict):
         msg["socket_id"] = socket_id
         self.pubsub.pub(channel, msg)
 
