@@ -111,8 +111,16 @@ async def connect(websocket: WebSocket):
                 if not data_json.get("username_receive"):
                     await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"})
                 try:
-                    await send_message_chat_private(MessageGlobal(username=username, msg=msg, chat=chat, username_receive=data_json["username_receive"]))
-                    await websocket_manager.send(socket_id, {"code": 200, "details": "mensagem enviada com sucesso"})
+                    message = await send_message_chat_private(MessageGlobal(
+                        username=username, 
+                        msg=msg, chat=chat, 
+                        username_receive=data_json["username_receive"]
+                    ))
+                    await websocket_manager.send_message(
+                        channel="private",
+                        socket_id=socket_id, 
+                        msg=message
+                    )#{"code": 200, "details": "mensagem enviada com sucesso"})
                 except HTTPException as e:
                     await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
 
