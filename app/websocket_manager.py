@@ -6,22 +6,24 @@ import json
 class manager:
     def __init__(self):
         self.clients: Dict[str, WebSocket] = {}
-        self.rooms: Dict[str, Set[str]]
-    
+        self.look = asyncio.Lock()
+
     async def connect(self, websocket: WebSocket, client_id):
         await websocket.accept()
-        self.clients[client_id] = websocket
+        async with self.look:
+            self.clients[client_id] = websocket
     
     async def broadcast(self, message):
-        for _, websocket in self.clients.items():
+        for websocket in self.clients.values():
             await websocket.send_text(json.dumps(message))
 
     async def disconnect(self, client_id):
         if client_id in self.clients:
-            del self.clients[client_id]
+            async with self.look:
+                del self.clients[client_id]
 
-    async def send(self, client_id, message):
-        if client_id in self.clients:
-            await self.clients[client_id].send_text(json.dumps(message))
+    async def send(self, socket_id, message):
+        if socket_id in self.clients:
+            await self.clients[socket_id].send_text(json.dumps(message, ensure_ascii=False))
 
 websocket_manager = manager()
