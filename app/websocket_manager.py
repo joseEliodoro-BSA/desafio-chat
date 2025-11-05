@@ -1,58 +1,62 @@
 from fastapi import WebSocket
 import asyncio
-from typing import Dict, List, Set
+from typing import Dict, List
 import json
 from app.pubsub_service import PubSub
 from threading import Thread
 
-class manager:
+
+class ConnectionData:
+    def __init__(self, username, websocket):
+        self.username: str = username
+        self.websocket: WebSocket = websocket
+
+Connections = Dict[str, ConnectionData]
+
+class WebSocketManager:
     def __init__(self):
-        self.clients: Dict[str, WebSocket] = {}
+        self.clients: Connections = {}
         self.look = asyncio.Lock()
         self.pubsub = PubSub()
 
-    async def connect(self, websocket: WebSocket, client_id):
+    async def connect(self, websocket: WebSocket, client_id, username: str):
         await websocket.accept()
         async with self.look:
-            self.clients[client_id] = websocket
-    
-    # async def broadcast(self, message):
-    #     for websocket in self.clients.values():
-    #         await websocket.send_text(json.dumps(message))
+            self.clients[client_id] = ConnectionData(username, websocket)
 
-    async def broadcast(self, message, exclude_socket_id: str | None = None):
-        for socket_id, websocket in self.clients.items():
-            if not (socket_id == exclude_socket_id):
-                await websocket.send_text(json.dumps(message))
+    async def broadcast(self, message, exclude_socket_id: List[str] | None = None):
+        for socket_id, connection_data in self.clients.items():
+            if not (socket_id in exclude_socket_id):
+                await connection_data.websocket.send_text(json.dumps(message))
 
-    async def disconnect(self, client_id):
-        if client_id in self.clients:
+    async def disconnect(self, socket_id: str):
+        if socket_id in self.clients:
             async with self.look:
-                del self.clients[client_id]
+                del self.clients[socket_id]
 
     async def disconnect_all(self):
         for socket_id in self.clients.keys():
             await self.disconnect(socket_id)
             
-    async def send(self, socket_id, message):
+    async def send(self, socket_id, message: Dict):
         if socket_id in self.clients:
-            await self.clients[socket_id].send_text(json.dumps(message, ensure_ascii=False))
+            await self.clients[socket_id].websocket.send_text(json.dumps(message, ensure_ascii=False))
 
     async def receive_geral(self, msg: Dict):
         if msg["channel"] == "geral":
             data = json.loads(msg["data"])
             socket_id = data["socket_id"]
             del data["socket_id"]
-            await self.broadcast(data, exclude_socket_id=socket_id)
+            await self.broadcast(data, exclude_socket_id=[socket_id])
 
-    async def send_geral(self, socket_id: str, msg: Dict):
+    async def send_message(self, channel: str, socket_id: str, msg: Dict):
         msg["socket_id"] = socket_id
-        self.pubsub.pub("geral", msg)
+        self.pubsub.pub(channel, msg)
 
     async def subscribes_channel(self):
         # Rodar subscribers em threads para não travar o event loop
         Thread(target=self.pubsub.sub, args=("geral", self.receive_geral), daemon=True).start()
-        Thread(target=self.pubsub.sub, args=("private", self.broadcast), daemon=True).start()
+        Thread(target=self.pubsub.sub, args=("private", self.receive_private), daemon=True).start()
 
 
-websocket_manager = manager()
+websocket_manager = WebSocketManager()
