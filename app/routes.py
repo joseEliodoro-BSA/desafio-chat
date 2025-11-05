@@ -5,8 +5,27 @@ from datetime import datetime
 from app.websocket_manager import websocket_manager
 from uuid import uuid4
 import json
+import asyncio
 
-router = APIRouter()
+
+from contextlib import asynccontextmanager
+
+broadcast_task = None
+
+# função executada no inicio do ciclo de vida da aplicação e no final
+@asynccontextmanager
+async def lifespan(app):
+  
+  global broadcast_task
+
+  # antes do app iniciar
+  broadcast_task = asyncio.create_task(websocket_manager.subscribes_channel())
+
+  yield 
+  broadcast_task.cancel()
+  await websocket_manager.disconnect_all()
+
+router = APIRouter(lifespan=lifespan)
 
 def now():
     return datetime.now().strftime("%d/%m/%Y %H:%M:%S")#.timestamp()#
@@ -64,7 +83,7 @@ async def connect(websocket: WebSocket):
     socket_id = str(uuid4())
     username = websocket.query_params.get('username')
     try:
-        await websocket_manager.connect(websocket, socket_id)
+        await websocket_manager.connect(websocket, socket_id, username)
         await websocket_manager.send(socket_id, {"hello": "world"})
     
         while True:
@@ -79,8 +98,12 @@ async def connect(websocket: WebSocket):
 
             if(chat == "geral"):
                 try:
-                    await send_message_chat_geral(MessageGlobal(username=username, msg=msg, chat=chat))
-                    await websocket_manager.send(socket_id, {"code": 200, "details": "mensagem enviada com sucesso"})
+                    message = await send_message_chat_geral(MessageGlobal(username=username, msg=msg, chat=chat))
+                    await websocket_manager.send_message(
+                        channel="geral", 
+                        socket_id=socket_id, 
+                        msg=message
+                    )#{"code": 200, "details": "mensagem enviada com sucesso"})
                 except HTTPException as e:
                     await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
                     
