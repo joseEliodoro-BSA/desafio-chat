@@ -14,7 +14,6 @@ class PubSub:
         pubsub.subscribe(room)
         for msg in pubsub.listen():
             if msg and msg["type"] == "message":
-                #print(f"[{room}] {msg['data']}")
                 asyncio.run(fn(msg))
 
     def pub(self, room: str, msg: Dict):
