@@ -49,18 +49,23 @@ class WebSocketManager:
             del data["socket_id"]
             await self.broadcast(data, exclude_socket_id=[socket_id])
 
+    def find_client_by_username(self, username):
+        for socket_id, connect in self.clients.items():
+            if connect.username == username:
+                return socket_id
+
     async def receive_private(self, msg: Dict):
         if msg["channel"] == "private":
             data = json.loads(msg["data"])
             send_socket_id = data["socket_id"]
-
-            receive_user = self.user_connect["socket_id"]
-            if receive_user:
-                receive_socket_id = data["socket_id"]
-                del data["socket_id"]
+            
+            username_receive = data["username_receive"]
+            receive_socket_id = self.find_client_by_username(username=username_receive)
+            del data["socket_id"]
+            if receive_socket_id:
                 await self.send(receive_socket_id, data)
             else:
-                await self.send(send_socket_id, {"error": "usuário não encontrado ou não conectado"})
+                await self.send(send_socket_id, {"error": f"usuário {username_receive} não foi encontrado ou não conectado"})
 
     async def send_message(self, channel: str, socket_id: str, msg: Dict):
         msg["socket_id"] = socket_id
