@@ -27,7 +27,7 @@ class WebSocketManager:
     async def broadcast(self, message, exclude_socket_id: List[str] | None = None):
         for socket_id, connection_data in self.clients_connected.items():
             if not (socket_id in exclude_socket_id):
-                await connection_data.websocket.send_text(json.dumps(message))
+                await connection_data.websocket.send_text(json.dumps(message, ensure_ascii=False))
 
     async def disconnect(self, socket_id: str):
         if socket_id in self.clients_connected:
