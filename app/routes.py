@@ -28,7 +28,7 @@ async def lifespan(app):
 router = APIRouter(lifespan=lifespan)
 
 def now():
-    return datetime.now().strftime("%d/%m/%Y %H:%M:%S")#.timestamp()#
+    return datetime.now().timestamp()
 
 @router.post("/create-user")
 async def create(user: UserSchema):
@@ -41,7 +41,7 @@ async def create(user: UserSchema):
 
     return new_user
 
-async def send_message_chat_geral(msgDto: MessageGlobal):
+async def save_message_geral(msgDto: MessageGlobal):
 
     if not await user_collection.find_one({"username": msgDto.username}):
         raise HTTPException(404, "usuário não encontrado")
@@ -52,7 +52,7 @@ async def send_message_chat_geral(msgDto: MessageGlobal):
     
     return new_msg
 
-async def send_message_chat_private(msgDto: MessageGlobal):
+async def save_message_private(msgDto: MessageGlobal):
 
     if not await user_collection.find_one({"username": msgDto.username}):
         raise HTTPException(404, "usuário não encontrado")
@@ -98,10 +98,10 @@ async def connect(websocket: WebSocket):
 
             if(chat == "geral"):
                 try:
-                    message = await send_message_chat_geral(MessageGlobal(username=username, msg=msg, chat=chat))
+                    message = await save_message_geral(MessageGlobal(username=username, msg=msg, chat=chat))
                     await websocket_manager.pub_message(
                         channel="geral", 
-                        socket_id=socket_id, 
+                        socket_id=socket_id,
                         msg=message
                     )
                 except HTTPException as e:
@@ -111,14 +111,14 @@ async def connect(websocket: WebSocket):
                 if not data_json.get("username_receive"):
                     await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"})
                 try:
-                    message = await send_message_chat_private(MessageGlobal(
+                    message = await save_message_private(MessageGlobal(
                         username=username, 
                         msg=msg, chat=chat, 
                         username_receive=data_json["username_receive"]
                     ))
                     await websocket_manager.pub_message(
                         channel="private",
-                        socket_id=socket_id, 
+                        socket_id=socket_id,
                         msg=message
                     )
                 except HTTPException as e:
