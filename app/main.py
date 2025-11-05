@@ -70,39 +70,42 @@ async def connect(websocket: WebSocket):
             data: str = await websocket.receive_text()
             data_json: dict = json.loads(data)
 
-            if not data_json.get('chat') or not data_json.get("msg"):
-                await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"})
-            
-            chat = data_json['chat']
-            msg = data_json["msg"]
-
-            if(chat == "geral"):
-                try:
-                    message = await save_message_geral(MessageGlobal(username=username, msg=msg, chat=chat))
-                    await websocket_manager.pub_message(
-                        channel="geral", 
-                        socket_id=socket_id,
-                        msg=message
-                    )
-                except HTTPException as e:
-                    await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
-                    
-            elif(chat == "private"):
-                if not data_json.get("username_receive"):
+            if data_json["command"] == "send_message":
+                if not data_json.get('chat') or not data_json.get("msg"):
                     await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"})
-                try:
-                    message = await save_message_private(MessageGlobal(
-                        username=username, 
-                        msg=msg, chat=chat, 
-                        username_receive=data_json["username_receive"]
-                    ))
-                    await websocket_manager.pub_message(
-                        channel="private",
-                        socket_id=socket_id,
-                        msg=message
-                    )
-                except HTTPException as e:
-                    await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
+                    continue
+
+                chat = data_json['chat']
+                msg = data_json["msg"]
+
+                if(chat == "geral"):
+                    try:
+                        message = await save_message_geral(MessageGlobal(username=username, msg=msg, chat=chat))
+                        await websocket_manager.pub_message(
+                            channel="geral", 
+                            socket_id=socket_id,
+                            msg=message
+                        )
+                    except HTTPException as e:
+                        await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
+                        
+                elif(chat == "private"):
+                    if not data_json.get("username_receive"):
+                        await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"})
+                    try:
+                        message = await save_message_private(MessageGlobal(
+                            username=username, 
+                            msg=msg, chat=chat, 
+                            username_receive=data_json["username_receive"]
+                        ))
+                        await websocket_manager.pub_message(
+                            channel="private",
+                            socket_id=socket_id,
+                            msg=message
+                        )
+                    
+                    except HTTPException as e:
+                        await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
 
     except WebSocketDisconnect:
         await websocket_manager.disconnect(socket_id)
