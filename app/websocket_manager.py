@@ -40,7 +40,6 @@ class WebSocketManager:
             await self.send(socket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
 
     async def save_message_geral(self, msgDto: Message):
-        print(msgDto)
         new_msg = {"date": datetime.now().timestamp(), **msgDto.model_dump(exclude=["_id", "date", "username_receive"], exclude_none=True)}
         result = await chats_collection.insert_one(new_msg)
         new_msg["_id"] = f"{result.inserted_id}"
@@ -58,60 +57,75 @@ class WebSocketManager:
         
         return new_msg
 
-    async def wait_command(self, websocket, socket_id: str, username: str):
-        
+    async def wait_command(self, websocket: WebSocket, socket_id: str, username: str, room):
+        websocket: WebSocket = self.clients_connected[socket_id].websocket
+
         while True:
             data: str = await websocket.receive_text()
             data_json: dict = json.loads(data)
             if data_json["command"] == "send_message":
-                if not data_json.get('chat') or not data_json.get("msg"):
-                    await self.send(socket_id, {"code": 400, "error": "requisição inválida"})
-                    continue
 
-                chat = data_json['chat']
-                msg = data_json["msg"]
-
-                #check_room_type(room_type)
+                await self.check_room_type(
+                    room=room,
+                    socket_id=socket_id,
+                    username=username,
+                    data=data_json
+                    )
                 #handle_general_room()
                 #handle_private_room()
                 #handle_specific_room()
                 
-                if(chat == "geral"):
-                    try:
-                        print("geral", Message(username=username, msg=msg, chat=chat))
-                        message = await self.save_message_geral(Message(username=username, msg=msg, chat=chat))
-                        print("geral")
-                        await self.pub_message(
-                            channel="geral", 
-                            socket_id=socket_id,
-                            msg=message
-                        )
-                    except HTTPException as e:
-                        await self.send(socket_id, {"code": 400, "error": e.detail})                       
-                elif(chat == "private"):
-                    if not data_json.get("username_receive"):
-                        await self.send(socket_id, {"code": 400, "error": "requisição inválida"}) 
-                        continue
-                    try:
-                        message = await self.save_message_private(Message(
-                            username=username, 
-                            msg=msg, chat=chat, 
-                            username_receive=data_json["username_receive"]
-                        ))
-                        await self.pub_message(
-                            channel="private",
-                            socket_id=socket_id,
-                            msg=message
-                        )
-                    
-                    except HTTPException as e:
-                        await self.send(socket_id, {"code": 400, "error": e.detail})
             
             elif data_json.get("command") == "find":
                 await self.send(socket_id, {"code": 200, "detail": "hello word"})
             else:
                 await self.send(socket_id, {"code": 400, "error": "inválid command"})
-                
+
+    async def check_room_type(self, room:str, socket_id: str, username:str, data: Dict):
+        msg = data["msg"]
+        if(room == "geral"):
+            await self.handle_general_room(socket_id, username, msg, room)                  
+        elif(room == "private"):
+            await self.handle_private_room(socket_id, username, msg, room)                    
+        else:
+            await self.handle_specific_room()
+
+    async def handle_general_room(self, socket_id: str, username: str, msg: str, room: str):
+        try:
+            message = await self.save_message_geral(Message(username=username, msg=msg, chat=room))
+            await self.pub_message(
+                channel="geral", 
+                socket_id=socket_id,
+                msg=message
+            )
+        except HTTPException as e:
+            await self.send(socket_id, {"code": 400, "error": e.detail})    
+
+    async def handle_private_room(self, socket_id: str, username: str, msg: str, room: str, data: Dict):
+        username_receive = data["username_receive"]
+        
+        if not username_receive:
+            await self.send(socket_id, {"code": 400, "error": "requisição inválida"}) 
+            return False
+        try:
+            message = await self.save_message_private(Message(
+                username=username, 
+                msg=msg, chat=room, 
+                username_receive=username_receive
+            ))
+            await self.pub_message(
+                channel="private",
+                socket_id=socket_id,
+                msg=message
+            )
+        
+        except HTTPException as e:
+            await self.send(socket_id, {"code": 400, "error": e.detail})
+
+    async def handle_specific_room(self):
+        pass
+
+
     async def broadcast(self, message: Dict, exclude_socket_id: List[str] | None = None):
         for socket_id, connection_data in self.clients_connected.items():
             if not (socket_id in exclude_socket_id):
@@ -119,9 +133,9 @@ class WebSocketManager:
 
     async def disconnect(self, socket_id: str):
         # get_websocket_manager_singleton().remove_ws(socket_id)
-        if socket_id in self._websocket_connected:
+        if socket_id in self.clients_connected:
             async with self.look:
-                del self._websocket_connected[socket_id]
+                del self.clients_connected[socket_id]
 
     async def disconnect_all(self):
         for socket_id in self.clients_connected.keys():
