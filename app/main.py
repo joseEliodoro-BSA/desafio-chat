@@ -5,25 +5,15 @@ from app.websocket_repository import WebSocketService
 from app.routes import router
 
 from contextlib import asynccontextmanager
-from app.singleton import get_websocket_manager_singleton
 import asyncio
 
 ROOMS = {}
 lock = asyncio.Lock()
 
 # função executada no inicio do ciclo de vida da aplicação e no final
-@asynccontextmanager
-async def lifespan(app):
-    yield 
-    for room in ROOMS.values():
-        room.cancel()
-    
-    await get_websocket_manager_singleton.disconnect_all()
 
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 app.include_router(router)
-
 
 @app.websocket("/ws/{room}")
 async def connect(websocket: WebSocket):
