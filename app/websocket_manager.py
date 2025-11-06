@@ -59,10 +59,11 @@ class WebSocketManager:
 
     async def wait_command(self, websocket: WebSocket, socket_id: str, username: str, room):
         websocket: WebSocket = self.clients_connected[socket_id].websocket
-
+    
         while True:
             data: str = await websocket.receive_text()
             data_json: dict = json.loads(data)
+            
             if data_json["command"] == "send_message":
 
                 await self.check_room_type(
@@ -71,10 +72,6 @@ class WebSocketManager:
                     username=username,
                     data=data_json
                     )
-                #handle_general_room()
-                #handle_private_room()
-                #handle_specific_room()
-                
             
             elif data_json.get("command") == "find":
                 await self.send(socket_id, {"code": 200, "detail": "hello word"})
@@ -86,9 +83,9 @@ class WebSocketManager:
         if(room == "geral"):
             await self.handle_general_room(socket_id, username, msg, room)                  
         elif(room == "private"):
-            await self.handle_private_room(socket_id, username, msg, room)                    
+            await self.handle_private_room(socket_id, username, msg, room, data)                    
         else:
-            await self.handle_specific_room()
+            await self.handle_specific_room(socket_id, username, msg, room)
 
     async def handle_general_room(self, socket_id: str, username: str, msg: str, room: str):
         try:
@@ -122,9 +119,32 @@ class WebSocketManager:
         except HTTPException as e:
             await self.send(socket_id, {"code": 400, "error": e.detail})
 
-    async def handle_specific_room(self):
-        pass
+    async def handle_specific_room(self, socket_id, username, msg, room):
+    
+        try:
+            message = await self.save_message_geral(Message(
+                username=username, 
+                msg=msg, chat=room,
+            ))
+            await self.pub_message(
+                channel=room,
+                socket_id=socket_id,
+                msg=message
+            )
+        
+        except HTTPException as e:
+            await self.send(socket_id, {"code": 400, "error": e.detail})
 
+    async def check_room_finisher(self, ROOMS: Dict[str, asyncio.Task]):
+        active_rooms = []
+        for connection in self.clients_connected.values():
+            websocket = connection.websocket
+            active_rooms.append(websocket.path_params.get("room"))
+
+        for key in list(ROOMS.keys()):
+            if key not in active_rooms:
+                del ROOMS[key]
+            
 
     async def broadcast(self, message: Dict, exclude_socket_id: List[str] | None = None):
         for socket_id, connection_data in self.clients_connected.items():
@@ -145,20 +165,13 @@ class WebSocketManager:
         if socket_id in self.clients_connected:
             await self.clients_connected[socket_id].websocket.send_text(json.dumps(message, ensure_ascii=False))
 
-    async def receive_geral(self, msg: Dict):
+    async def receive(self, msg: Dict):
         if msg["channel"] == "geral":
             data = json.loads(msg["data"])
             socket_id = data["socket_id"]
             del data["socket_id"]
             await self.broadcast(data, exclude_socket_id=[socket_id])
-
-    def find_client_by_username(self, username):
-        for socket_id, connect in self.clients_connected.items():
-            if connect.username == username:
-                return socket_id
-
-    async def receive_private(self, msg: Dict):
-        if msg["channel"] == "private":
+        elif msg["channel"] == "private":
             data = json.loads(msg["data"])
             send_socket_id = data["socket_id"]
             
@@ -169,18 +182,40 @@ class WebSocketManager:
                 await self.send(receive_socket_id, data)
             else:
                 await self.send(send_socket_id, {"error": f"usuário {username_receive} não foi encontrado ou não conectado"})
+        else: 
+            data = json.loads(msg["data"])
+            send_socket_id = data["socket_id"]
 
+            client_connect_room = self.find_client_connect_room(room=data["chat"])
+            del data["socket_id"]
+            for id in client_connect_room:
+                await self.send(id, data)
+    
+    def find_client_by_username(self, username):
+        for socket_id, connect in self.clients_connected.items():
+            if connect.username == username:
+                return socket_id
+
+    def find_client_connect_room(self, room):
+        client_connects_room = []
+        for connection in self.clients_connected.values():
+            websocket = connection.websocket
+            if room == websocket.path_params.get("room"):
+                socket_id = self.find_client_by_username(websocket.query_params.get("username"))
+                client_connects_room.append(socket_id)
+        return client_connects_room
+    
     async def pub_message(self, channel: str, socket_id: str, msg: Dict):
         msg["socket_id"] = socket_id
         self.pubsub.pub(channel, msg)
 
     async def subscribes_channel(self):
         # Rodar subscribers em threads para não travar o event loop
-        Thread(target=self.pubsub.sub, args=("geral", self.receive_geral), daemon=True).start()
-        Thread(target=self.pubsub.sub, args=("private", self.receive_private), daemon=True).start()
+        Thread(target=self.pubsub.sub, args=("geral", self.receive), daemon=True).start()
+        Thread(target=self.pubsub.sub, args=("private", self.receive), daemon=True).start()
 
     async def subscribe_channel(self, room):
-        Thread(target=self.pubsub.sub, args=(room, self.receive_private), daemon=True).start()
+        Thread(target=self.pubsub.sub, args=(room, self.receive), daemon=True).start()
 
 
 websocket_manager = WebSocketManager()
