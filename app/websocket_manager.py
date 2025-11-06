@@ -31,10 +31,12 @@ class WebSocketManager:
     async def connect(self, websocket: WebSocket, socket_id: str, username: str):
         # get_websocket_manager_singleton().add_ws()
         await websocket.accept()
+        is_connect = self.find_client_by_username(username)
         async with self.look:
             self.clients_connected[socket_id] = ConnectionData(username, websocket)
-        if not await user_collection.find_one({"username": username}):
-            await self.send(socket_id, {"error": f"usuário {username} não foi encontrado ou não conectado"})
+        print(not is_connect)
+        if (not await user_collection.find_one({"username": username})) or is_connect:
+            await self.send(socket_id, {"error": f"usuário '{username}' não foi encontrado ou já conectado"})
             await self.disconnect(socket_id)
         else:
             await self.send(socket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
