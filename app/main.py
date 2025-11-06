@@ -40,7 +40,8 @@ async def connect(websocket: WebSocket):
 
     if room not in ["geral", "private"]:
         async with lock:
-            ROOMS[room] = asyncio.create_task(websocket_manager.subscribe_channel(room))
+            if not room in ROOMS:
+                ROOMS[room] = asyncio.create_task(websocket_manager.subscribe_channel(room))
 
     try:
         await websocket_manager.connect(websocket, socket_id, username)
