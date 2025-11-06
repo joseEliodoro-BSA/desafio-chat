@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from uuid import uuid4
 
 from app.db import user_collection, chats_collection
-from app.websocket_manager import websocket_manager
+from app.websocket_repository import websocket_manager
 from app.schemas import Message
 from app.routes import router
 
@@ -24,6 +24,9 @@ async def lifespan(app):
 
   yield 
   broadcast_task.cancel()
+  for room in rooms.values():
+    room.cancel()
+    
   await websocket_manager.disconnect_all()
 
 
@@ -66,6 +69,11 @@ async def connect(websocket: WebSocket):
         await websocket_manager.connect(websocket, socket_id, username)
         await websocket_manager.send(socket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
     
+        #connect + send
+        #wait_command()
+        #validate_command()
+
+
         while True:
             data: str = await websocket.receive_text()
             data_json: dict = json.loads(data)
@@ -78,6 +86,11 @@ async def connect(websocket: WebSocket):
                 chat = data_json['chat']
                 msg = data_json["msg"]
 
+                #check_room_type(room_type)
+                #handle_general_room()
+                #handle_private_room()
+                #handle_specific_room()
+                
                 if(chat == "geral"):
                     try:
                         message = await save_message_geral(Message(username=username, msg=msg, chat=chat))
@@ -113,7 +126,50 @@ async def connect(websocket: WebSocket):
                 await websocket_manager.send(socket_id, {"code": 400, "error": "inválid command"})
     except WebSocketDisconnect:
         await websocket_manager.disconnect(socket_id)
+        #check_room_finisher()
     
     except Exception as e:
         return HTTPException(400, e)
     
+rooms = {}
+
+@app.websocket("/ws/{room}")
+async def chat_rooms(websocket: WebSocket, room: str):
+    
+    global rooms
+
+    socket_id = str(uuid4())
+    username = websocket.query_params.get('username')
+    try:
+        await websocket_manager.connect(websocket, socket_id, username)
+        await websocket_manager.send(socket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
+
+        if(room and not(room in rooms)):
+            rooms[room] = asyncio.create_task(websocket_manager.subscribe_channel(room))
+
+        while True:
+            data: str = await websocket.receive_text()
+            data_json: dict = json.loads(data)
+
+            if data_json["command"] == "send_message":
+                if not data_json.get('chat') or not data_json.get("msg"):
+                    await websocket_manager.send(socket_id, {"code": 400, "error": "requisição inválida"})
+                    continue
+
+                msg = data_json["msg"]
+                try:
+                    message = await save_message_geral(Message(username=username, msg=msg, chat=room))
+                    await websocket_manager.pub_message(
+                        channel=room, 
+                        socket_id=socket_id,
+                        msg=message
+                    )
+            
+                except HTTPException as e:
+                    await websocket_manager.send(socket_id, {"code": 400, "error": e.detail})
+
+    except WebSocketDisconnect:
+        await websocket_manager.disconnect(socket_id)
+    
+    except Exception as e:
+        return HTTPException(400, e)
