@@ -49,8 +49,7 @@ class WebsocketManager(metaclass=Singleton):
 
     async def disconnect(self, id: str):
         if id in self._websocket_connected:
-            await self.websocket_connected[id].websocket.close()
-            async with self.look:
+            with self.look:
                 del self._websocket_connected[id]
     
     def find_client_by_username(self, username):
