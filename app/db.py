@@ -1,7 +1,7 @@
 from pymongo import AsyncMongoClient
 
 
-client = AsyncMongoClient("localhost")
+client = AsyncMongoClient("mongodb")
 db = client.chat
 
 

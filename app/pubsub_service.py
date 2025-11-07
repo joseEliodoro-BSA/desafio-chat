@@ -7,7 +7,12 @@ from threading import Thread
 
 class PubSub:
     def __init__(self):
-        self.redis_client = Redis(host="localhost", port=6379, encoding="utf-8", decode_responses=True)
+        self.redis_client = Redis(
+            host="redis", 
+            port=6379, 
+            encoding="utf-8", 
+            decode_responses=True
+        )
 
     def sub(self, room: str, fn: Callable):
         pubsub = self.redis_client.pubsub()
