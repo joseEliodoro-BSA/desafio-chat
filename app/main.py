@@ -18,16 +18,19 @@ app.include_router(router)
 @app.websocket("/ws/{room}")
 async def connect(websocket: WebSocket):
     
-    websocket_service = WebSocketService(
-        socket_id = str(uuid4()),
-        websocket=websocket
-    )
+   
     # if room not in ["geral", "private"]:
     #     async with lock:
     #         if not room in ROOMS:
     #             ROOMS[room] = asyncio.create_task(websocket_service.subscribe_channel(room))
     
     try:
+
+        websocket_service = WebSocketService(
+            socket_id = str(uuid4()),
+            websocket=websocket
+        )
+
         await websocket_service.connect(websocket)
         
         #validate_command()
