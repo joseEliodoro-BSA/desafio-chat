@@ -23,7 +23,7 @@ class WebSocketService:
         self.room = websocket.path_params.get("room")
     
         self.sub_private_room = asyncio.create_task(self.subscribe_channel("private"))
-        self.sub_private_room = asyncio.create_task(self.subscribe_channel("geral"))
+        self.sub_geral_room = asyncio.create_task(self.subscribe_channel("geral"))
         self.sub_room = asyncio.create_task(self.subscribe_channel())
 
     async def connect(self, websocket):
@@ -35,8 +35,8 @@ class WebSocketService:
         )
 
         if (not await user_collection.find_one({"username": self.username})):
+            await self.websocket_manager.send(self.websocket_id, {"error": f"usuário '{self.username}' não foi encontrado"})
             await self.websocket_manager.disconnect(self.websocket_id)
-            raise HTTPException(401, {"error": f"usuário '{self.username}' não foi encontrado ou já conectado"})
 
         await self.websocket_manager.send(self.websocket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
 
@@ -122,6 +122,7 @@ class WebSocketService:
             
     async def disconnect(self):
         await self.websocket_manager.disconnect(self.websocket_id)
+        self.sub_room.cancel()
 
     async def receive(self, msg: Dict):
         data = json.loads(msg["data"])

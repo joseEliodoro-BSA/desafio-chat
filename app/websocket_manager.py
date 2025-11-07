@@ -43,14 +43,14 @@ class WebsocketManager(metaclass=Singleton):
             )
 
         if (is_connect):
-            print(id)
             await self.send(id, {"error": f"usuário já conectado"})
             await self.disconnect(id)
 
     async def disconnect(self, id: str):
-        if id in self._websocket_connected:
+        if id in self.websocket_connected:
             with self.look:
-                del self._websocket_connected[id]
+                websocket: WebSocket = self._websocket_connected.pop(id).websocket
+                await websocket.close()
     
     def find_client_by_username(self, username):
         for socket_id, connection in self.websocket_connected.items():
