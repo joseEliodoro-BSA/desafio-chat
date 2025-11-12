@@ -1,16 +1,12 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from uuid import uuid4
 
-from app.websocket_repository import WebSocketService
+from app.services.websocket_service import WebSocketService
 from app.routes import router
 
-import asyncio
 from app.logger_config import setup_logging
 
 setup_logging()
-
-ROOMS = {}
-lock = asyncio.Lock()
 
 app = FastAPI()
 app.include_router(router)
