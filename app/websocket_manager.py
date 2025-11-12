@@ -3,6 +3,10 @@ from fastapi import WebSocket
 from typing import Dict, List
 from threading import Lock
 import json
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 class Singleton(type):
 
@@ -27,7 +31,7 @@ class WebsocketManager(metaclass=Singleton):
     def __init__(self):
         self._websocket_connected: Connections = {}
         self.look = Lock()
-        
+
     @property
     def websocket_connected(self):
         return self._websocket_connected
@@ -43,6 +47,7 @@ class WebsocketManager(metaclass=Singleton):
             )
 
         if (is_connect):
+            logger.error("usuário já possui uma seção ativa")
             await self.send(id, {"error": f"usuário já conectado"})
             await self.disconnect(id, is_connect=True)
 
@@ -61,11 +66,13 @@ class WebsocketManager(metaclass=Singleton):
                 return socket_id
     
     async def broadcast(self, message: Dict, exclude_socket_id: List[str] | None = None):
+        logger.info("enviando mensagem global da aplicação")
         for socket_id, connection in self.websocket_connected.items():
             if not (socket_id in exclude_socket_id):
                 await connection.websocket.send_text(json.dumps(message, ensure_ascii=False))
 
     async def disconnect_all(self):
+        logger.info("desconectando todos os usuários da aplicação")
         for socket_id in list(self.websocket_connected.keys()):
             await self.disconnect(socket_id)
     
