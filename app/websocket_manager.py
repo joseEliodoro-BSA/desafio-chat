@@ -2,23 +2,13 @@ from fastapi import WebSocket
 
 from typing import Dict, List
 from threading import Lock
+
+from app.singleton import Singleton
 import json
 import logging
 
 
 logger = logging.getLogger(__name__)
-
-class Singleton(type):
-
-    _instances = {}
-    _lock: Lock = Lock()
-
-    def __call__(cls, *args, **kwargs):
-        with cls._lock:
-            if cls not in cls._instances:
-                instance = super().__call__(*args, **kwargs)
-                cls._instances[cls] = instance
-        return cls._instances[cls]
 
 class ConnectionData:
     def __init__(self, username, websocket):
