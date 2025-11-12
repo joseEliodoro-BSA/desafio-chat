@@ -1,6 +1,6 @@
 from fastapi import WebSocket, HTTPException
 
-from typing import Dict, List
+from typing import Dict
 from threading import Thread
 from datetime import datetime
 import asyncio
@@ -11,6 +11,9 @@ from app.pubsub_service import PubSub
 from app.db import user_collection, chats_collection
 from app.schemas import Message
 from app.websocket_manager import WebsocketManager
+import logging 
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketService:
@@ -62,25 +65,26 @@ class WebSocketService:
     async def wait_command(self, websocket: WebSocket):
     
         while True:
-            data: str = await websocket.receive_text()
-            data_json: dict = json.loads(data)
-            
-            if data_json["command"] == "send_message":
+            data: str = await websocket.receive_text() 
+            await self.validate_command(data_json=json.loads(data))
 
-                await self.check_room_type(
-                    data=data_json
-                    )
-            # adicionar outros comandos
-            elif data_json.get("command") == "find":
-                await self.websocket_manager.send(
-                    self.websocket_id, 
-                    {"code": 200, "detail": "hello word"}
+    async def validate_command(self, data_json):
+        if data_json["command"] == "send_message":
+            await self.check_room_type(
+                data=data_json
                 )
-            else:
-                await self.websocket_manager.send(
-                    self.websocket_id, 
-                    {"code": 400, "error": "inválid command"}
-                )
+        elif data_json.get("command") == "connect_room":
+            logger.info("Trocando de sala")
+            if not data_json.get("room"):
+                return
+            self.room = data_json.get("room")
+            self.sub_room.cancel()
+            self.sub_room = asyncio.create_task(self.subscribe_channel())
+        else:
+            await self.websocket_manager.send(
+                self.websocket_id, 
+                {"code": 400, "error": "inválid command"}
+            )
 
     async def check_room_type(self, data: Dict):
         msg = data["msg"]           
