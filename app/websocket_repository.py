@@ -36,7 +36,7 @@ class WebSocketService:
 
         if (not await user_collection.find_one({"username": self.username})):
             await self.websocket_manager.send(self.websocket_id, {"error": f"usuário '{self.username}' não foi encontrado"})
-            await self.websocket_manager.disconnect(self.websocket_id)
+            await self.websocket_manager.disconnect(self.websocket_id, True)
 
         await self.websocket_manager.send(self.websocket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
 
