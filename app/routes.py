@@ -4,6 +4,7 @@ from app.db import user_collection, chats_collection
 from typing import List
 router = APIRouter()
 
+
 @router.post("/create-user")
 async def create(user: UserSchema):
     if await user_collection.find_one({"username": user.username}):
@@ -15,23 +16,24 @@ async def create(user: UserSchema):
 
     return new_user
 
+
 @router.delete("/delete-all-message")
 async def delete_all_message():
     await chats_collection.delete_many({})
     return True
+
 
 @router.delete("/delete-all-users")
 async def delete_all_users():
     await user_collection.delete_many({})
     return True
 
-@router.get("/find-messages", response_model= List[Message])
+
+@router.get("/find-messages", response_model=List[Message])
 async def list_message():
     return await chats_collection.find().to_list(100)
 
+
 @router.get("/find-users", response_model=List[UserSchema])
-async def list_message():
+async def list_users():
     return await user_collection.find().to_list(100)
-
-
-
