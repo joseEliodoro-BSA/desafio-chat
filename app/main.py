@@ -6,6 +6,9 @@ from app.routes import router
 
 from contextlib import asynccontextmanager
 import asyncio
+from app.logger_config import setup_logging
+
+setup_logging()
 
 ROOMS = {}
 lock = asyncio.Lock()
@@ -41,6 +44,6 @@ async def connect(websocket: WebSocket):
         # async with lock:
         #     await websocket_service.check_room_finisher(ROOMS)
     except Exception as e:
-        return HTTPException(400, e)
+        return Exception(400, e)
     
 
