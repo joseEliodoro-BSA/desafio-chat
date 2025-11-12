@@ -1,10 +1,14 @@
-from pydantic import BaseModel, field_validator
-from typing import List
+from pydantic import BaseModel, BeforeValidator, Field
+from typing import Annotated, List, Optional
 from datetime import datetime
 
+PyObjectId = Annotated[str, BeforeValidator(str)]
+
 class UserSchema(BaseModel):
-    _id: str | None = None
+    id: Optional[PyObjectId] = Field(default=None, alias="_id") # None = None
     username: str
+    online: bool = False
+    in_chat: bool = False
 
 class Message(BaseModel):
     msg: str
