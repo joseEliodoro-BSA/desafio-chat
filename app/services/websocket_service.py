@@ -8,7 +8,7 @@ import json
 
 
 from app.pubsub_service import PubSub
-from app.db import user_collection, chats_collection
+from app.db import db
 from app.schemas import Message
 from app.websocket_manager import WebsocketManager
 import logging 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class WebSocketService:
     
     def __init__(self, websocket: WebSocket, socket_id: str,):
-        self.pubsub = PubSub()
+        self.pubsub:PubSub = PubSub()
         self.websocket_manager: WebsocketManager = WebsocketManager()
         self.websocket_id = socket_id 
         self.username = websocket.query_params.get("username")
@@ -37,7 +37,7 @@ class WebSocketService:
             username=self.username
         )
 
-        if (not await user_collection.find_one({"username": self.username})):
+        if (not await db.users.find_one({"username": self.username})):
             await self.websocket_manager.send(self.websocket_id, {"error": f"usuário '{self.username}' não foi encontrado"})
             await self.websocket_manager.disconnect(self.websocket_id, True)
 
@@ -46,18 +46,18 @@ class WebSocketService:
     async def save_message_geral(self, msgDto: Message):
         new_msg = {"date": datetime.now().timestamp(), **msgDto.model_dump(exclude=["_id", "date", "username_receive"], exclude_none=True)}
         
-        result = await chats_collection.insert_one(new_msg)
+        result = await db.chats.insert_one(new_msg)
         new_msg["_id"] = f"{result.inserted_id}"
         
         return new_msg
 
     async def save_message_private(self, msgDto: Message):
 
-        if not await user_collection.find_one({"username": msgDto.username_receive}):
+        if not await db.users.find_one({"username": msgDto.username_receive}):
             raise HTTPException(404, "destinatário não encontrado")
         
         new_msg = {"date": datetime.now().timestamp(), **msgDto.model_dump(exclude=["_id", "date"], exclude_none=True)}
-        result = await chats_collection.insert_one(new_msg)
+        result = await db.chats.insert_one(new_msg)
         new_msg["_id"] = f"{result.inserted_id}"
         
         return new_msg
