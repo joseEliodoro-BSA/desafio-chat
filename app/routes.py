@@ -2,6 +2,10 @@ from fastapi import APIRouter, HTTPException
 from app.schemas import UserSchema, Message
 from app.db import user_collection, chats_collection
 from typing import List
+import logging
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -19,12 +23,14 @@ async def create(user: UserSchema):
 
 @router.delete("/delete-all-message")
 async def delete_all_message():
+    logger.info("Excluindo todas as mensagem no banco")
     await chats_collection.delete_many({})
     return True
 
 
 @router.delete("/delete-all-users")
 async def delete_all_users():
+    logger.info("Excluindo todos os usuários")
     await user_collection.delete_many({})
     return True
 
