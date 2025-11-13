@@ -29,17 +29,10 @@ class WebsocketManager(metaclass=Singleton):
     async def connect(self, id: str, websocket: WebSocket, username: str):
         await websocket.accept()
 
-        is_connect = self.find_client_by_username(username) 
-
         with self.look:
             self._websocket_connected[id] = ConnectionData(
                 username=username, websocket= websocket
             )
-
-        if (is_connect):
-            logger.error("usuário já possui uma seção ativa")
-            await self.send(id, {"error": f"usuário já conectado"})
-            await self.disconnect(id, is_connect=True)
 
     async def disconnect(self, id: str, is_connect=False):
         websocket: WebSocket | None = None

@@ -1,3 +1,4 @@
+from bson import ObjectId
 from fastapi import WebSocket, HTTPException
 
 from typing import Dict
@@ -11,6 +12,7 @@ from app.pubsub_service import PubSub
 from app.db import db
 from app.schemas import Message
 from app.websocket_manager import WebsocketManager
+from app.services.authenticate_service import AuthenticateService
 import logging 
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,7 @@ logger = logging.getLogger(__name__)
 class WebSocketService:
     
     def __init__(self, websocket: WebSocket, socket_id: str,):
+        self.authenticate = AuthenticateService()
         self.pubsub:PubSub = PubSub()
         self.websocket_manager: WebsocketManager = WebsocketManager()
         self.websocket_id = socket_id 
@@ -30,19 +33,30 @@ class WebSocketService:
         self.sub_room = asyncio.create_task(self.subscribe_channel())
 
     async def connect(self, websocket):
+        try:
 
-        await self.websocket_manager.connect(
-            websocket=websocket, 
-            id=self.websocket_id,
-            username=self.username
-        )
+            await self.websocket_manager.connect(
+                websocket=websocket, 
+                id=self.websocket_id,
+                username=self.username
+            )
+            
+            if not await self.authenticate.is_auth(self.username):
 
-        if (not await db.users.find_one({"username": self.username})):
-            await self.websocket_manager.send(self.websocket_id, {"error": f"usuário '{self.username}' não foi encontrado"})
+                await self.websocket_manager.send(
+                    self.websocket_id, 
+                    {"error": f"usuário '{self.username}' não foi encontrado"}
+                )
+                await self.disconnect(self.websocket_id)
+
+            await self.websocket_manager.send(
+                self.websocket_id, 
+                {"code": 200, "details": "conexão iniciada com sucesso"}
+            )
+        except Exception as e:
+            await self.websocket_manager.send(self.websocket_id, {"error": str(e)})
             await self.websocket_manager.disconnect(self.websocket_id, True)
-
-        await self.websocket_manager.send(self.websocket_id, {"code": 200, "details": "conexão iniciada com sucesso"})
-
+            
     async def save_message_geral(self, msgDto: Message):
         new_msg = {"date": datetime.now().timestamp(), **msgDto.model_dump(exclude=["_id", "date", "username_receive"], exclude_none=True)}
         
@@ -66,6 +80,7 @@ class WebSocketService:
     
         while True:
             data: str = await websocket.receive_text() 
+            print(data)
             await self.validate_command(data_json=json.loads(data))
 
     async def validate_command(self, data_json):
@@ -125,8 +140,8 @@ class WebSocketService:
             await self.websocket_manager.send(self.websocket_id, {"code": 400, "error": e.detail})
             
     async def disconnect(self):
+        await self.authenticate.disconnect(self.username)
         await self.websocket_manager.disconnect(self.websocket_id)
-        self.sub_room.cancel()
 
     async def receive(self, msg: Dict):
         data = json.loads(msg["data"])
