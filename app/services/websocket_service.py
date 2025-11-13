@@ -1,19 +1,19 @@
-from bson import ObjectId
 from fastapi import WebSocket, HTTPException
 
 from typing import Dict
 from threading import Thread
 from datetime import datetime
-import asyncio
+import logging 
 import json
 
 
-from app.pubsub_service import PubSub
+from app.pubsub_service import RedisClient
 from app.db import db
 from app.schemas import Message
 from app.websocket_manager import WebsocketManager
+from app.services.create_room_service import CreateRoomService
 from app.services.authenticate_service import AuthenticateService
-import logging 
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,15 +22,13 @@ class WebSocketService:
     
     def __init__(self, websocket: WebSocket, socket_id: str,):
         self.authenticate = AuthenticateService()
-        self.pubsub:PubSub = PubSub()
+        self.redis_client:RedisClient = RedisClient()
         self.websocket_manager: WebsocketManager = WebsocketManager()
         self.websocket_id = socket_id 
         self.username = websocket.query_params.get("username")
-        self.room = websocket.path_params.get("room")
-    
-        self.sub_private_room = asyncio.create_task(self.subscribe_channel("private"))
-        self.sub_geral_room = asyncio.create_task(self.subscribe_channel("geral"))
-        self.sub_room = asyncio.create_task(self.subscribe_channel())
+        self.room = None
+        self.user_id = None
+        self.create_room_service = CreateRoomService()
 
     async def connect(self, websocket):
         try:
@@ -41,8 +39,9 @@ class WebSocketService:
                 username=self.username
             )
             
-            if not await self.authenticate.is_auth(self.username):
-
+            user = await self.authenticate.is_auth(self.username)
+            self.user_id = user.id
+            if not user:
                 await self.websocket_manager.send(
                     self.websocket_id, 
                     {"error": f"usuário '{self.username}' não foi encontrado"}
@@ -80,21 +79,28 @@ class WebSocketService:
     
         while True:
             data: str = await websocket.receive_text() 
-            print(data)
             await self.validate_command(data_json=json.loads(data))
 
-    async def validate_command(self, data_json):
+    async def validate_command(self, data_json: Dict[str, object]):
         if data_json["command"] == "send_message":
+            if not self.room:
+                await self.websocket_manager.send(
+                    self.websocket_id, {"error": "se conecte a uma sala antes de enviar uma mensagem"}
+                )
+                return
             await self.check_room_type(
                 data=data_json
                 )
         elif data_json.get("command") == "connect_room":
-            logger.info("Trocando de sala")
             if not data_json.get("room"):
+                self.websocket_manager.send(self.websocket_id, {"error": "parametro 'room' não encontrado"})
                 return
-            self.room = data_json.get("room")
-            self.sub_room.cancel()
-            self.sub_room = asyncio.create_task(self.subscribe_channel())
+            self.room = data_json["room"]
+            await self.create_room_service.connect_room(self.user_id, self.room, self.receive)
+            logger.info(self.room)
+        elif data_json.get("command") == "disconnect_room":
+            await self.create_room_service.disconnect(self.user_id)
+            self.room = None
         else:
             await self.websocket_manager.send(
                 self.websocket_id, 
@@ -160,9 +166,5 @@ class WebSocketService:
 
     async def pub_message(self, msg: Dict):
         msg["socket_id"] = self.websocket_id
-        self.pubsub.pub(self.room, msg)
+        await self.redis_client.pub(self.room, msg)
 
-    async def subscribe_channel(self, room: str | None = None):
-        if not room:
-            room = self.room
-        Thread(target=self.pubsub.sub, args=(room, self.receive), daemon=True).start()
