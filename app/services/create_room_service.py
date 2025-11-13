@@ -15,18 +15,19 @@ class CreateRoomService:
         self.task: asyncio.Task = None
         self.pubsub: PubSub = None
 
-    async def connect_room(self, id_user: ObjectId, room: str, callback: callable):
-        logger.info(f"login feito na sala '{room}'")
+    async def connect_room(self, id_user: str, room: str, callback: callable):
         if self.task:
             await self.disconnect()
 
         self.task, self.pubsub = await self.redis_client.sub(room, callback)
-        await db.users.update_one({"_id": id_user}, {"$set": {"in_chat": True}})
+        await db.users.update_one({"_id": ObjectId(id_user)}, {"$set": {"in_chat": True}})
+        logger.info(f"login feito na sala '{room}'")
 
-    async def disconnect(self, id_user: ObjectId):
+    async def disconnect(self, id_user: str):
         if self.task:
             await self.pubsub.unsubscribe()
             self.task.cancel()
         self.task = None
         self.pubsub = None
-        await db.users.update_one({"_id": id_user}, {"$set": {"in_chat": False}})
+
+        await db.users.update_one({"_id": ObjectId(id_user)}, {"$set": {"in_chat": False}})
