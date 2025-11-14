@@ -48,11 +48,13 @@ async def send(ws, loop):
         elif(user_input == "5"):
             room = await loop.run_in_executor(None, input, "DIGITE ROOM: ")
             password = await loop.run_in_executor(None, input, "DIGITE SENHA: ")
+            # limit = await loop.run_in_executor(None, input, "DIGITE LIMIT: ")
+
             await ws.send(json.dumps({ 
                 "command": "create_room",
                 "room": room or "reservado",
-                "password": password 
-                
+                "password": password, 
+                # "limit": int(limit), 
             }))
 
         await loop.run_in_executor(None, input, "PRECIONE ENTER PARA APAGAR TUDO")

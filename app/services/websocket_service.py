@@ -12,7 +12,7 @@ from app.schemas import Chat, Message
 from app.websocket_manager import WebsocketManager
 from app.services.create_room_service import CreateRoomService
 from app.services.authenticate_service import AuthenticateService
-
+from app.command_schemas import CommandCreateRoom
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +73,13 @@ class WebSocketService:
         while True:
             data: str = await websocket.receive_text() 
             print(data)
-            await self.validate_command(data_json=json.loads(data))
+            try:
+                await self.validate_command(data_json=json.loads(data))
+            except Exception as e:
+                self.websocket_manager.send(self.websocket_id, {"error": str(e)})
 
     async def validate_command(self, data_json: Dict[str, object]):
-        command = data_json["command"]
+        command = (data_json["command"])
         if command == "send_message":
             if not self.room:
                 await self.websocket_manager.send(
@@ -105,23 +108,24 @@ class WebSocketService:
             except Exception as e:
                 logger.error(e)
                 await self.websocket_manager.send(self.websocket_id, {"error": str(e)})
-
         elif command == "disconnect_room":
             await self.create_room_service.disconnect(self.user_id)
             self.room = None
         elif command == "create_room":
-            self.room = data_json["room"]
             try:
+                data = CommandCreateRoom(**data_json)
+                self.room = data.room
+                logger.info(data)
                 await self.create_room_service.create_room(
-                    id_user= [self.user_id],
+                    id_user= self.user_id,
                     chat=Chat(
                         name= self.room,
-                        password=data_json.get("password")
+                        password=data.password,
+                        limit=data.limit
                     ), 
                     callback=self.receive
                 )
             except Exception as e:
-                logger.warning(f"chat['{self.room}'] já existe")
                 await self.websocket_manager.send(self.websocket_id, {"error": str(e)})
         else:
             await self.websocket_manager.send(
