@@ -9,7 +9,7 @@ from app.singleton import Singleton
 
 class RedisClient(metaclass=Singleton):
     def __init__(self):
-        self.redis_url = "redis://localhost:6379"
+        self.redis_url = "redis://redis:6379"
         self._redis_client = None
         self._tasks: Dict[str, Tuple[asyncio.Task, PubSub]] = {}
 
