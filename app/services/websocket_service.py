@@ -1,7 +1,6 @@
 from fastapi import WebSocket, HTTPException
 
 from typing import Dict
-from threading import Thread
 from datetime import datetime
 import logging 
 import json
@@ -9,7 +8,7 @@ import json
 
 from app.pubsub_service import RedisClient
 from app.db import db
-from app.schemas import Message
+from app.schemas import Chat, Message
 from app.websocket_manager import WebsocketManager
 from app.services.create_room_service import CreateRoomService
 from app.services.authenticate_service import AuthenticateService
@@ -38,28 +37,22 @@ class WebSocketService:
                 id=self.websocket_id,
                 username=self.username
             )
-            
+            logger.info("authenticando usuário")
             user = await self.authenticate.is_auth(self.username)
             self.user_id = user.id
-            if not user:
-                await self.websocket_manager.send(
-                    self.websocket_id, 
-                    {"error": f"usuário '{self.username}' não foi encontrado"}
-                )
-                await self.disconnect(self.websocket_id)
-
             await self.websocket_manager.send(
                 self.websocket_id, 
                 {"code": 200, "details": "conexão iniciada com sucesso"}
             )
         except Exception as e:
+            logger.error(e)
             await self.websocket_manager.send(self.websocket_id, {"error": str(e)})
             await self.websocket_manager.disconnect(self.websocket_id, True)
             
     async def save_message_geral(self, msgDto: Message):
         new_msg = {"date": datetime.now().timestamp(), **msgDto.model_dump(exclude=["_id", "date", "username_receive"], exclude_none=True)}
         
-        result = await db.chats.insert_one(new_msg)
+        result = await db.messages.insert_one(new_msg)
         new_msg["_id"] = f"{result.inserted_id}"
         
         return new_msg
@@ -70,7 +63,7 @@ class WebSocketService:
             raise HTTPException(404, "destinatário não encontrado")
         
         new_msg = {"date": datetime.now().timestamp(), **msgDto.model_dump(exclude=["_id", "date"], exclude_none=True)}
-        result = await db.chats.insert_one(new_msg)
+        result = await db.messages.insert_one(new_msg)
         new_msg["_id"] = f"{result.inserted_id}"
         
         return new_msg
@@ -79,10 +72,12 @@ class WebSocketService:
     
         while True:
             data: str = await websocket.receive_text() 
+            print(data)
             await self.validate_command(data_json=json.loads(data))
 
     async def validate_command(self, data_json: Dict[str, object]):
-        if data_json["command"] == "send_message":
+        command = data_json["command"]
+        if command == "send_message":
             if not self.room:
                 await self.websocket_manager.send(
                     self.websocket_id, {"error": "se conecte a uma sala antes de enviar uma mensagem"}
@@ -91,16 +86,43 @@ class WebSocketService:
             await self.check_room_type(
                 data=data_json
                 )
-        elif data_json.get("command") == "connect_room":
-            if not data_json.get("room"):
-                self.websocket_manager.send(self.websocket_id, {"error": "parametro 'room' não encontrado"})
-                return
-            self.room = data_json["room"]
-            await self.create_room_service.connect_room(self.user_id, self.room, self.receive)
-            logger.info(self.room)
-        elif data_json.get("command") == "disconnect_room":
+        elif command == "connect_room":
+            try:
+                self.room = data_json.get("room")
+                if not self.room:
+                    await self.websocket_manager.send(
+                        self.websocket_id, 
+                        {"error": "parametro 'room' não encontrado"}
+                    )
+                    return
+                await self.create_room_service.connect_room(
+                    self.user_id, 
+                    self.room, 
+                    self.receive, 
+                    password=data_json.get("password")
+                    )
+                logger.info(self.room)
+            except Exception as e:
+                logger.error(e)
+                await self.websocket_manager.send(self.websocket_id, {"error": str(e)})
+
+        elif command == "disconnect_room":
             await self.create_room_service.disconnect(self.user_id)
             self.room = None
+        elif command == "create_room":
+            self.room = data_json["room"]
+            try:
+                await self.create_room_service.create_room(
+                    id_user= [self.user_id],
+                    chat=Chat(
+                        name= self.room,
+                        password=data_json.get("password")
+                    ), 
+                    callback=self.receive
+                )
+            except Exception as e:
+                logger.warning(f"chat['{self.room}'] já existe")
+                await self.websocket_manager.send(self.websocket_id, {"error": str(e)})
         else:
             await self.websocket_manager.send(
                 self.websocket_id, 
@@ -147,6 +169,8 @@ class WebSocketService:
             
     async def disconnect(self):
         await self.authenticate.disconnect(self.username)
+        if self.room:
+            await self.create_room_service.disconnect(self.user_id)
         await self.websocket_manager.disconnect(self.websocket_id)
 
     async def receive(self, msg: Dict):
