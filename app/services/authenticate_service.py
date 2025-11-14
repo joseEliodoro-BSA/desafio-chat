@@ -15,18 +15,15 @@ class AuthenticateService:
         
         user_data = await db.users.find_one({"username": username})
         if not user_data: 
-            return False
+            raise Exception(f"usuário '{username}' não foi encontrado")
         
         user = UserSchema(**user_data)
-    
+
         if(user.online):
             logger.error("usuário já possui uma seção ativa")
             raise Exception("usuário já conectado")
-
-        user.online = True
-        
-        await db.users.update_one({"_id": ObjectId(user.id)}, {"$set": user.model_dump(exclude="id")})
-
+         
+        await db.users.update_one({"_id": ObjectId(user.id)}, {"$set": {"online": True}})
         return user
     
     async def disconnect(self, username):
