@@ -23,3 +23,10 @@ class Message(BaseModel):
     #     if isinstance(value, str):
     #         return datetime.strptime(value, "%d/%m/%Y %H:%M:%S")
     #     return value
+
+class Chat(BaseModel):
+    name: str
+    password: Optional[str]
+    id: Optional[PyObjectId] = Field(default=None, alias="_id")
+    users: List[PyObjectId] = Field(default=[])
+    limit: int = Field(default=3)
