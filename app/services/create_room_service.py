@@ -20,7 +20,7 @@ class CreateRoomService:
         if await db.chats.find_one({"name": chat.name}):
             raise Exception("chat já existe")
         
-        await db.chats.insert_one(chat.model_dump(by_alias=True))
+        await db.chats.insert_one(chat.model_dump(exclude="id", by_alias=True))
 
         if callback:
             await self.connect_room(
